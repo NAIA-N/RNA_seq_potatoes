@@ -85,7 +85,7 @@ $ for zip in *.zip; do unzip $zip; done       #unzip output files
 MultiQC
 module load MultiQC/1.9-foss-2019b-Python-3.7.4
 $ mkdir Trim_multiqc
-multiqc /rds/projects/l/leachlj-potato-qtl-project/NA_AreaOnly/Trim_fastqc/*_fastqc.zip
+multiqc /rds/projects/l/leachlj-potato-qtl-project/NA_AreaOnly/Results/Trim_fastqc/*_fastqc.zip
 # uses default multiQC 
 
 
