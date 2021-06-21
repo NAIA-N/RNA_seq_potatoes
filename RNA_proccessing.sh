@@ -8,7 +8,7 @@ Ctrl+a d
 screen -r
 
 
-#loading files
+#loading module
 module purge; module load bluebear
 # Quality Control
 cd /rds/projects/l/leachlj-potato-qtl-project
