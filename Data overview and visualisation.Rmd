@@ -1,0 +1,308 @@
+---
+title: "Data overview and visualisation"
+author: "Nacima Abdi"
+date: "18/07/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Perform initial quality control 
+
+
+
+```{r,warning = FALSE}
+#########################################
+###   Load the required libraries     ###
+#########################################
+
+#Working directory
+#setwd("Z:/NA_AreaOnly/Results/Analysis")
+
+# DESeq2 library
+
+library("DESeq2")
+# Library for plots
+library("ggplot2")
+library(RColorBrewer)
+library(dplyr)
+library("plotly")
+# Library for heatmaps
+library("pheatmap")
+
+
+```
+
+Load raw gene-level counts and sample data and prepare for analysis.
+
+```{r}
+###   Read the counts from a file   ###
+#######################################
+
+# Read the table of counts into a data frame, 
+count_table <- as.matrix(read.csv("counts.csv",  row.names="GeneID"))
+# Check the top few rows of the data frame
+#head(count_table)
+
+# Dimensions of the count table
+dim(count_table)
+#import sample meta data by coping column D-I from excel 
+sample_data <- read.table(file = "clipboard", 
+                      sep = "\t", header=TRUE)
+#rearrange sample data so column names for count_table matches with library name
+colnames(sample_data)
+col_order <- c("Library.name", "Variety", "Tissue", "Time.point", "Replicate", "Sample.code")
+sample_data <- sample_data[, col_order]
+sampleInfo<- as.data.frame(sample_data)
+#rename column
+names(sampleInfo)[names(sampleInfo) == "Library.name"] <- "Sample"
+#order sample data by sample name
+sampleInfo <- sampleInfo[order(sampleInfo$Sample),]
+
+rownames(sampleInfo) <- sampleInfo$Sample
+sampleID <- sampleInfo$Sample
+
+#save SampleInfo
+#wite.csv(sampleInfo,file="sampleInfo.csv",quote=FALSE,row.names=FALSE)
+
+
+#rename Column name to match sampleID
+
+count_name <- colnames(count_table)
+count_names <- c("Length", sampleID)
+count_matrix <- count_table
+colnames(count_matrix) <- count_names
+#delete length column
+count_matrix = subset(count_matrix, select = -c(Length))
+#save count matrix
+#wite.csv(count_matrix,file="count_matrix.csv",row.names=TRUE)
+
+#set species, tissue type and time point as factor
+as.factor(sampleInfo$Variety)
+as.factor(sampleInfo$Tissue)
+as.factor(sampleInfo$Time.point)
+
+```
+
+Removing genes that have low count
+```{r}
+#################################################################
+### Remove genes that have less than 10 reads mapping to them ###
+#################################################################
+#check dimensions
+dim(count_matrix)
+
+#set threshold to 10 
+lowcoverage_threshold <- 10
+
+# Index of genes that the maximal count across the samples is 10 or less
+lowcoverage<-(rowMax(as.matrix(count_matrix)) <= lowcoverage_threshold)
+
+# Check the numbers
+table(lowcoverage)
+
+#Filter out low coverage genes by redefining the count table
+count_matrix<-count_matrix[!lowcoverage,]
+dim(count_matrix)
+```
+
+Using 'count_matrix' and 'sampleInfo', construct DESeqDataSet object
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = count_matrix, colData = sampleInfo, design = ~ Time.point + Variety + Tissue)
+
+```
+VST Transformation of raw reads
+blind argument: whether the transformation should be blind to the sample information specified by the design formula. blind=True to perform sample quality assurance. 
+
+```{r}
+#vst transform
+vsd <- vst(dds, blind = TRUE)
+#save vst transformed matrix
+#write.csv(assay(vsd), file="vst_transform.csv",quote=FALSE,row.names=TRUE)
+```
+
+
+Assess overall similarity between samples with Heatmap of the sample-to-sample Euclidean distances
+
+```{r,fig.asp = 0.9, fig.width = 25, fig.align="center"}
+
+#transpose data
+sampleDists <- dist(t(assay(vsd)), method = "euclidean")
+sampleDistMatrix <- as.matrix(sampleDists)
+
+#set annotations
+colors <- colorRampPalette(rev(brewer.pal(9, "YlGnBu")))(255)
+colour_time <-  brewer.pal(4, "Set1")
+names(colour_time) <- unique(sampleInfo$Time.point)
+colour_variety<- c('Susceptible: Wila Huaka CIP code: 703248' = "darksalmon", 'Tolerant: Negrita CIP code:703671' = "darkmagenta")
+names(colour_variety) <- unique(sampleInfo$Variety)
+colour_tissue <- c(Leaf = "green", Root = "red")
+names(colour_tissue) <- unique(sampleInfo$Tissue)
+colours_anno <- list(Variety = colour_variety, Time = colour_time, Tissue = colour_tissue)
+
+
+
+#Generate sample-to-sample Euclidean distance heatmap 
+
+
+# plot
+heatmap_sample <- pheatmap(sampleDistMatrix,
+                   clustering_distance_rows=sampleDists,
+                   clustering_distance_cols=sampleDists,
+                   clustering_method = "average",
+                   treeheight_row = 100,
+                   treeheight_col = 100,
+                   annotation_col = sampleInfo[,2:4],
+                   annotation_row = sampleInfo[,2:4],
+                   annotation_colors = colours_anno,
+                   show_rownames = TRUE,
+                   show_colnames = TRUE,
+                   main = "Sample to Sample Euclidean Distances Heatmap",
+                   cellwidth = 20,
+                   cellheight = 20,
+                   cutree_rows = 2,
+                   cutree_cols = 2,
+                   col=colors,
+                   fontsize = 20,
+                   border_color = "black")
+
+#save plot
+#png("Sample to Sample Euclidean Distances Heatmap.png",  width = 1900, height = 1500)
+#heatmap_sample
+#dev.off()
+
+vsd_cor <- cor(assay(vsd))
+
+# heatmap
+phm_cor <- pheatmap(vsd_cor,
+                    clustering_method = "average",
+                    annotation_col = sampleInfo[,2:4],
+                    annotation_row = sampleInfo[,2:4],
+                    treeheight_row = 80,
+                    treeheight_col = 80,
+                    annotation_colors = colours_anno,
+                    show_rownames = TRUE,
+                    show_colnames = TRUE,
+                    cellwidth = 15,
+                    cellheight = 15,
+                    cutree_rows = 2,
+                    cutree_cols = 2,
+                    col=rev(colors),
+                    fontsize = 12,
+                    border_color = "black")
+```
+
+
+
+
+
+Sample CO which is Susceptible leaf sample at late response (SL2-3) is concerning as it is closer to root samples than the rest even though it follows the pattern of late response and recovery.
+
+```{r, fig.asp = 0.8, fig.width = 20, fig.align="center"}
+#see if data separates by tissue
+plotPCA(vsd, intgroup=c("Tissue"))
+
+#see if data separates by time.point
+plotPCA(vsd, intgroup=c("Time.point"))
+
+#see if data separates by Variety
+plotPCA(vsd, intgroup=c( "Variety"))
+
+        
+pca_data <- plotPCA(vsd, intgroup = c("Tissue", "Time.point", "Variety"), ntop=2000,  returnData = TRUE)
+percentVar <- round(100 * attr(pca_data, "percentVar"))
+PVA_all <- ggplot(pca_data, aes(PC1, PC2, color=Time.point, shape=Variety)) +
+  geom_point(size=5) +
+  theme(text = element_text(size=45)) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+
+#save plot
+png("Sample PCA .png", width = 1900, height = 1000)
+PVA_all
+dev.off()
+
+       
+```
+Biggest variance is due to tissue type explained by pc1  so in order to identify the effect of variety on DGE, I will separate datasets for tissue type and run DGE analysis separately. 
+
+PC2 captures variance due to Time.point
+
+
+
+```{r}
+#More fancier pca plot
+# -----------------------------------------------------
+# 4. Define PCA plot
+# -----------------------------------------------------
+pca.plot <- function(read.counts, classes, 
+                     comps = c(1, 2), ntop = min(500, nrow(read.counts)), standard = T,
+                     col = c('lightblue', 'orange', 'MediumVioletRed', 'SpringGreen', 'red', 'blue', 'pink', 'black', 'purple', 'maroon', 'brown', 'cadetblue', 'chocolate', 'darkolivegreen', 'firebrick', 'gold', 'darkred')){
+  top_index <- order(apply(read.counts, 1, var), decreasing = TRUE)[1:ntop]
+  pca <- prcomp(scale(t(read.counts[top_index,]), center = standard, scale = standard))
+  prp <- pca$sdev^2 * 100 / sum(pca$sdev^2)
+  
+  pca_comps <- pca$x[,comps]
+  prp_comps <- round(prp[comps], 2)
+  
+  df <- data.frame(pc1 = pca_comps[,1], pc2 = pca_comps[,2], condition = classes)
+  p  <- ggplot(df, aes(x = pc1, y = pc2, color = condition)) + 
+    geom_point(size = 3) + 
+    labs(title = paste0('Principal Component Analysis - Axes ', comps[1] , ' and ', comps[2]), 
+         x = paste0('PC', comps[1], ' (', prp_comps[1], '%)'), 
+         y = paste0('PC', comps[2], ' (', prp_comps[2], '%)')) + 
+    geom_text(label = colnames(read.counts), vjust = 0, nudge_y = 1) +
+    scale_color_manual(values = col)
+  return(p)
+}
+# -----------------------------------------------------
+# Plot PCA on the read counts
+# -----------------------------------------------------
+group_tissue <- vsd$Tissue
+group_variety<- vsd$Variety
+group_time.point<- vsd$Time.point
+
+pca_tissue <- pca.plot(assay(vsd), group_tissue, comps = c(1,2), ntop = 2000)
+ggplotly(pca_tissue)
+
+
+pca_variety <- pca.plot(assay(vsd), group_variety, comps = c(1,2), ntop = 2000)
+ggplotly(pca_variety)
+
+
+pca_time.point<- pca.plot(assay(vsd), group_time.point, comps = c(1,2), ntop = 2000)
+ggplotly(pca_time.point)
+
+
+
+```
+PC3 and PC4
+Performing PCA
+```{r}
+# Create a matrix from our table of counts
+pca_countmatrix <- assay(vsd)
+  
+  # transpose the matrix so that rows = samples and columns = variables
+  pca_countmatrix<-t(pca_countmatrix)
+
+# Perform the PCA
+PCA <- prcomp(pca_countmatrix)
+
+
+
+#plot PC3 and PC4
+pca_data <- plotPCA(vsd, intgroup = c("Tissue", "Time.point", "Variety"),  returnData = TRUE)
+percentVar <- round(100 * attr(pca_data, "percentVar"))
+ggplot(pca_data, aes(PC3, PC4, color=Time.point, shape=Variety)) +
+  geom_point(size=3) +
+  xlab(paste0("PC3: ",percentVar[3],"% variance")) +
+  ylab(paste0("PC4: ",percentVar[4],"% variance")) + 
+  coord_fixed()
+```
+
+

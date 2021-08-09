@@ -1,0 +1,424 @@
+---
+title: "Leaf analysis"
+author: "Nacima Abdi"
+date: "29/07/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r, message = FALSE, warning = FALSE}
+#library 
+library(goProfiles)
+library(tidyverse)
+library(ggvenn)
+library(VennDiagram)
+
+```
+
+
+
+
+
+Examine KEGG and GO enrichment under normal conditions
+
+```{r, message = FALSE, warning = FALSE}
+#DEG between susceptible and tolerant
+
+#load data
+
+Control_up_genes = read.csv("Upregulated_genes_control_Leaf.csv")
+
+Control_down_genes = read.csv("Downregulated_genes_Control_Leaf.csv")
+
+
+
+```
+
+genes common in both variety at each condition
+```{r}
+#t1
+#up
+T1_sus_up <- read.csv("Upregulated_genes_susceptible_T1_Leaf.csv")
+
+T1_tol_up <-read.csv("Upregulated_genes_tolerant_T1_Leaf.csv")
+
+#match 
+T1_up_genes_overlap = intersect(T1_sus_up$susL_T1_Up_genes, T1_tol_up$tolL_T1_Up_genes)
+write.csv(data.frame(T1_up_genes_overlap), file= "Upregulated_genes_common_T1_Leaf.csv", row.names = FALSE)
+
+#down
+T1_sus_down <- read.csv("Downregulated_genes_susceptible_T1_Leaf.csv")
+
+T1_tol_down <-read.csv("Downregulated_genes_tolerant_T1_Leaf.csv")
+
+#match 
+T1_down_genes_overlap = intersect(T1_sus_down$susL_T1_Down_genes, T1_tol_down$tolL_T1_Down_genes)
+write.csv(data.frame(T1_down_genes_overlap), file= "Downregulated_genes_common_T1_Leaf.csv", row.names = FALSE)
+```
+
+```{r}
+#2
+#up
+T2_sus_up <- read.csv("Upregulated_genes_susceptible_T2_Leaf.csv")
+
+T2_tol_up <-read.csv("Upregulated_genes_tolerant_T2_Leaf.csv")
+
+#match 
+T2_up_genes_overlap = intersect(T2_sus_up$susL_T2_Up_genes, T2_tol_up$tolL_T2_Up_genes)
+write.csv(data.frame(T2_up_genes_overlap), file= "Upregulated_genes_common_T2_Leaf.csv", row.names = FALSE)
+
+#down
+T2_sus_down <- read.csv("Downregulated_genes_susceptible_T2_Leaf.csv")
+
+T2_tol_down <-read.csv("Downregulated_genes_tolerant_T2_Leaf.csv")
+
+#match 
+T2_down_genes_overlap = intersect(T2_sus_down$susL_T2_Down_genes, T2_tol_down$tolL_T2_Down_genes)
+write.csv(data.frame(T2_down_genes_overlap), file= "Downregulated_genes_common_T2_Leaf.csv", row.names = FALSE)
+
+```
+
+```{r}
+#t3
+#up
+T3_sus_up <- read.csv("Upregulated_genes_susceptible_T3_Leaf.csv")
+
+T3_tol_up <-read.csv("Upregulated_genes_tolerant_T3_Leaf.csv")
+
+#match 
+T3_up_genes_overlap = intersect(T3_sus_up$susL_T3_Up_genes, T3_tol_up$tolL_T3_Up_genes)
+write.csv(data.frame(T3_up_genes_overlap), file= "Upregulated_genes_common_T3_Leaf.csv", row.names = FALSE)
+
+#down
+T3_sus_down <- read.csv("Downregulated_genes_susceptible_T3_Leaf.csv")
+
+T3_tol_down <-read.csv("Downregulated_genes_tolerant_T3_Leaf.csv")
+
+#match 
+T3_down_genes_overlap = intersect(T3_sus_down$susL_T3_Down_genes, T3_tol_down$tolL_T3_Down_genes)
+write.csv(data.frame(T3_down_genes_overlap), file= "Downregulated_genes_common_T3_Leaf.csv", row.names = FALSE)
+
+
+
+
+```
+
+
+genes unique to varity at each condition
+```{r}
+
+#susceptible 
+#load data
+#T1
+T1_seq_s <- read.csv("DEG_sig_results_susceptible_T1_Leaf.csv")
+T1_seq_s_genes <- T1_seq_s$X
+
+#T2
+T2_seq_s <- read.csv("DEG_sig_results_susceptible_T2_Leaf.csv")
+#T1
+T3_seq_s <- read.csv("DEG_sig_results_susceptible_T3_Leaf.csv")
+
+#tolerant
+#load data
+#T1
+T1_seq_t <- read.csv("DEG_sig_results_tolerant_T1_Leaf.csv")
+#T2
+T2_seq_t <- read.csv("DEG_sig_results_tolerant_T2_Leaf.csv")
+#T1
+T3_seq_t <- read.csv("DEG_sig_results_tolerant_T3_Leaf.csv")
+
+```
+
+
+
+Susceptible
+genes present 
+
+Venn diagram for upregulated genes in all conditions for sus
+
+```{r}
+#data
+#number of genes in each set
+size_T1_sus_up <- nrow(T1_sus_up)
+size_T2_sus_up <- nrow(T2_sus_up)
+size_T3_sus_up <- nrow(T3_sus_up)
+#list of genes shared between conditions
+T1vsT2_up_genes_overlap_s = intersect(T1_sus_up$susL_T1_Up_genes, T2_sus_up$susL_T2_Up_genes)
+write.csv(data.frame(T1vsT2_up_genes_overlap_s), file= "Upregulated_genes in all time.points__tRoot.csv", row.names = FALSE)
+
+
+
+T1vsT3_up_genes_overlap_s = intersect(T1_sus_up$susL_T1_Up_genes, T3_sus_up$susL_T3_Up_genes)
+T2vsT3_up_genes_overlap_s = intersect(T2_sus_up$susL_T2_Up_genes, T3_sus_up$susL_T3_Up_genes)
+T1vsT2vsT3_up_genes_overlap_s = intersect(T1vsT2_up_genes_overlap_s, T3_sus_up$susL_T3_Up_genes)
+
+#number of genes shared between each set
+size_T1vsT2_up_s <- length(T1vsT2_up_genes_overlap_s)
+size_T1vsT3_up_s <- length(T1vsT3_up_genes_overlap_s)
+size_T2vsT3_up_s <- length(T2vsT3_up_genes_overlap_s)
+size_T1vsT2vsT3_up_s <- length(T1vsT2vsT3_up_genes_overlap_s)
+
+venn.plot <- draw.triple.venn(
+	area1 = size_T1_sus_up,
+	area2 = size_T2_sus_up,
+	area3 = size_T3_sus_up,
+	n12 = size_T1vsT2_up_s,
+	n23 = size_T2vsT3_up_s,
+	n13 = size_T1vsT3_up_s,
+	n123 = size_T1vsT2vsT3_up_s,
+	category = c("Early Response", "Late Response", "Recovery"),
+	euler.d = TRUE, 
+	scaled = TRUE,
+	fill = c("blue", "red", "green"),
+	lty = "blank",
+	cex = 2,
+	cat.dist = 0.08,
+	cat.cex = 2,
+	cat.col = c("blue", "red", "green")
+	);
+grid.draw(venn.plot);
+grid.newpage();
+# Writing to file
+tiff(filename = "Suceptible_upregulated genes_Venn3_diagram_Leaf.tiff", width= 800, compression = "lzw");
+grid.draw(venn.plot);
+dev.off()
+
+```
+Venn diagram for downregulated genes in all conditions for sus
+
+```{r}
+data
+#number of genes in each set
+size_T1_sus_down <- nrow(T1_sus_down)
+size_T2_sus_down <- nrow(T2_sus_down)
+size_T3_sus_down <- nrow(T3_sus_down)
+#list of genes shared between conditions
+T1vsT2_down_genes_overlap_s = intersect(T1_sus_down$susL_T1_down_genes, T2_sus_down$susL_T2_down_genes)
+T1vsT3_down_genes_overlap_s = intersect(T1_sus_down$susL_T1_down_genes, T3_sus_down$susL_T3_down_genes)
+T2vsT3_down_genes_overlap_s = intersect(T2_sus_down$susL_T2_down_genes, T3_sus_down$susL_T3_down_genes)
+T1vsT2vsT3_down_genes_overlap_s = intersect(T1vsT2_down_genes_overlap_s, T3_sus_down$susL_T3_down_genes)
+
+#number of genes shared between each set
+size_T1vsT2_down_s <- length(T1vsT2_down_genes_overlap_s)
+size_T1vsT3_down_s <- length(T1vsT3_down_genes_overlap_s)
+size_T2vsT3_down_s <- length(T2vsT3_down_genes_overlap_s)
+size_T1vsT2vsT3_down_s <- length(T1vsT2vsT3_down_genes_overlap_s)
+
+venn.plot <- draw.triple.venn(
+	area1 = size_T1_sus_down,
+	area2 = size_T2_sus_down,
+	area3 = size_T3_sus_down,
+	n12 = size_T1vsT2_down_s,
+	n23 = size_T2vsT3_down_s,
+	n13 = size_T1vsT3_down_s,
+	n123 = size_T1vsT2vsT3_down_s,
+	category = c("Early Response", "Late Response", "Recovery"),
+	euler.d = TRUE, 
+	scaled = TRUE,
+	fill = c("blue", "red", "green"),
+	lty = "blank",
+	cex = 2,
+	cat.dist = 0.08,
+	cat.cex = 2,
+	cat.col = c("blue", "red", "green")
+	);
+grid.draw(venn.plot);
+grid.newpage();
+# Writing to file
+tiff(filename = "Suceptible_downregulated genes_Venn3_diagram_Leaf.tiff", width= 800, compression = "lzw");
+grid.draw(venn.plot);
+dev.off()
+
+```
+no overlap
+
+
+Venn diagram for upregulated genes in all conditions for tol
+
+```{r}
+#data
+#number of genes in each set
+size_T1_tol_up <- nrow(T1_tol_up)
+head(size_T1_tol_up)
+size_T2_tol_up <- nrow(T2_tol_up)
+head(size_T2_tol_up)
+size_T3_tol_up <- nrow(T3_tol_up)
+head(size_T3_tol_up)
+#list of genes shared between conditions
+T1vsT2_up_genes_overlap_t = intersect(T1_tol_up$tolL_T1_Up_genes, T2_tol_up$tolL_T2_Up_genes)
+T1vsT3_up_genes_overlap_t = intersect(T1_tol_up$tolL_T1_Up_genes, T3_tol_up$tolL_T3_Up_genes)
+T2vsT3_up_genes_overlap_t = intersect(T2_tol_up$tolL_T2_Up_genes, T3_tol_up$tolL_T3_Up_genes)
+T1vsT2vsT3_up_genes_overlap_t = intersect(T1vsT2_up_genes_overlap_s, T1vsT3_up_genes_overlap_t)
+
+#number of genes shared between each set
+size_T1vsT2_up_t <- length(T1vsT2_up_genes_overlap_t)
+size_T1vsT3_up_t <- length(T1vsT3_up_genes_overlap_t)
+size_T2vsT3_up_t <- length(T2vsT3_up_genes_overlap_t)
+size_T1vsT2vsT3_up_t <- length(T1vsT2vsT3_up_genes_overlap_t)
+
+#venn.plot <- draw.triple.venn(
+#	area1 = size_T1_tol_up,
+#	area2 = size_T2_tol_up,
+#	area3 = size_T3_tol_up,
+#	n12 = size_T1vsT2_up_t, 
+#	n23 = size_T2vsT3_up_t,
+#	n13 = size_T1vsT3_up_t,
+#	n123 = size_T1vsT2vsT3_up_t,
+#	category = c("Early Response", "Late Response", "Recovery"),
+#	euler.d = TRUE, 
+#	scaled = TRUE,
+#	fill = c("blue", "red", "green"),
+#	lty = "blank",
+#	cex = 2,
+#	cat.dist = 0.08,
+#	cat.cex = 2,
+#	cat.col = c("blue", "red", "green")
+#	);
+#grid.draw(venn.plot);
+#grid.newpage();
+# Writing to file
+#tiff(filename = "Tolarent_upregulated genes_Venn3_diagram_Leaf.tiff", width= 800, compression = "lzw");
+#grid.draw(venn.plot);
+dev.off()
+
+```
+
+```{r}
+data
+#number of genes in each set
+size_T1_tol_down <- nrow(T1_tol_down)
+size_T2_tol_down <- nrow(T2_tol_down)
+size_T3_tol_down <- nrow(T3_tol_down)
+#list of genes shared between conditions
+T1vsT2_down_genes_overlap_t = intersect(T1_tol_down$tolL_T1_down_genes, T2_tol_down$tolL_T2_down_genes)
+T1vsT3_down_genes_overlap_t = intersect(T1_tol_down$tolL_T1_down_genes, T3_tol_down$tolL_T3_down_genes)
+T2vsT3_down_genes_overlap_t = intersect(T2_tol_down$tolL_T2_down_genes, T3_tol_down$tolL_T3_down_genes)
+T1vsT2vsT3_down_genes_overlap_t = intersect(T1vsT2_down_genes_overlap_t, T3_tol_down$tolL_T3_down_genes)
+
+#number of genes shared between each set
+size_T1vsT2_down_t <- length(T1vsT2_down_genes_overlap_t)
+size_T1vsT3_down_t <- length(T1vsT3_down_genes_overlap_t)
+size_T2vsT3_down_t <- length(T2vsT3_down_genes_overlap_t)
+size_T1vsT2vsT3_down_t <- length(T1vsT2vsT3_down_genes_overlap_t)
+
+venn.plot <- draw.triple.venn(
+	area1 = size_T1_tol_down,
+	area2 = size_T2_tol_down,
+	area3 = size_T3_tol_down,
+	n12 = size_T1vsT2_down_t,
+	n23 = size_T2vsT3_down_t,
+	n13 = size_T1vsT3_down_t,
+	n123 = size_T1vsT2vsT3_down_t,
+	category = c("Early Response", "Late Response", "Recovery"),
+	euler.d = TRUE, 
+	scaled = TRUE,
+	fill = c("blue", "red", "green"),
+	lty = "blank",
+	cex = 2,
+	cat.dist = 0.08,
+	cat.cex = 2,
+	cat.col = c("blue", "red", "green")
+	);
+grid.draw(venn.plot);
+grid.newpage();
+# Writing to file
+tiff(filename = "Tolarent_downregulated genes_Venn3_diagram_Leaf.tiff", width= 800, compression = "lzw");
+grid.draw(venn.plot);
+dev.off()
+
+
+```
+Bar chart for number of Upregulated genes for susceptible and tolerant for all conditions
+```{r}
+#Create Bar chart
+
+Variety <- c("Drought Tolarent", "Drought Tolarent", "Drought Tolarent","Drought Susceptible", "Drought Susceptible","Drought Susceptible")
+DGE_Direction <- c("Upregulated", "Upregulated","Upregulated","Upregulated", "Upregulated","Upregulated")
+
+#gene count
+Gene_Count <- c(size_T1_sus_up, size_T2_sus_up, size_T3_sus_up, size_T1_tol_up, size_T2_tol_up, size_T3_tol_up) 
+                
+
+Condition <- c("Early_Response S", "Late_Response S", "Recovery S","Early_Response T", "Late_Response T", "Recovery T")
+
+
+
+Up_table <- data.frame(Condition, DGE_Direction, Gene_Count, Variety)
+
+as.factor(Up_table$Variety)
+
+
+# Creating plot
+#Su_Barchart <- 
+ggplot(Up_table, aes(x = Up_table$Condition, y = Up_table$Gene_Count)) +
+  geom_col(aes(fill = Up_table$Variety)) +
+  theme(axis.text.x = element_text(angle = 50, vjust = 1.0, hjust=1)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  labs(x = "Time Point", y = "Number of Genes", fill = "Condition", title = "Upregulated Differential Gene Expression") +
+  theme(plot.title = element_text(hjust = 0.5) 
+          
+)
+
+Condition <-c("Early_Response", "Late_Response", "Recovery","Early_Response", "Late_Response", "Recovery")
+Up_table <- data.frame(Condition, DGE_Direction, Gene_Count, Variety)
+
+as.factor(Up_table$Variety)
+ggplot(Up_table, aes(x = Up_table$Condition, y = Up_table$Gene_Count, fill = Up_table$Variety)) +
+    labs(x = "Time Point", y = "Number of Genes", fill = "Condition", title = "Upregulated Differential Gene Expression") +
+  geom_line() +
+  geom_point(size = 4, shape = 21)  # Also use a point with a color fill
+
+
+
+```
+
+Bar chart for number of down regulated genes for susceptible and tolerant for all conditions
+```{r}
+
+Variety <- c("Drought Tolarent", "Drought Tolarent", "Drought Tolarent","Drought Susceptible", "Drought Susceptible","Drought Susceptible")
+DGE_Direction <- c("Downregulated","Downregulated","Downregulated","Downregulated","Downregulated","Downregulated")
+
+#gene count
+Gene_Count <- c(size_T1_sus_down, size_T2_sus_down, size_T3_sus_down, size_T1_tol_down, size_T2_tol_down, size_T3_tol_down) 
+               
+
+Condition <- c("Early_Response S", "Late_Response S", "Recovery S","Early_Response T", "Late_Response T", "Recovery T")
+
+
+
+Up_table <- data.frame(Condition, DGE_Direction, Gene_Count, Variety)
+
+as.factor(Up_table$Variety)
+
+
+# Creating plot
+#Su_Barchart <- 
+ggplot(Up_table, aes(x = Up_table$Condition, y = Up_table$Gene_Count)) +
+  geom_col(aes(fill = Up_table$Variety)) +
+  theme(axis.text.x = element_text(angle = 50, vjust = 1.0, hjust=1)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  labs(x = "Time Point", y = "Number of Genes", fill = "Condition", title = "Upregulated Differential Gene Expression") +
+  theme(plot.title = element_text(hjust = 0.5) 
+          
+)
+
+Condition <-c("Early_Response", "Late_Response", "Recovery","Early_Response", "Late_Response", "Recovery")
+Up_table <- data.frame(Condition, DGE_Direction, Gene_Count, Variety)
+
+as.factor(Up_table$Variety)
+ggplot(Up_table, aes(x = Up_table$Condition, y = Up_table$Gene_Count, fill = Up_table$Variety)) +
+    labs(x = "Time Point", y = "Number of Genes", fill = "Condition", title = "Downregulated Differential Gene Expression") +
+  geom_line() +
+  geom_point(size = 4, shape = 21)  # Also use a point with a color fill
+
+
+
+```

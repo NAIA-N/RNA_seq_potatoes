@@ -66,7 +66,6 @@ find . -type f \( -name "*.fastq" \) > /rds/projects/l/leachlj-potato-qtl-projec
 
 ####Trimming###
 files=(`ls /rds/projects/l/leachlj-potato-qtl-project/rawdata/mRNA/*/*.fastq`)
-files=(`ls rawdata/*/*.fastq`)
 
 for ((i=0; i < ${#files[@]}; i++)); do
     java -jar $EBROOTTRIMMOMATIC/trimmomatic-0.39.jar SE -threads 4 ${files[$i]} "/rds/projects/l/leachlj-potato-qtl-project/NA_AreaOnly/Trimmed_output/`basename ${files[$i]} .fastq`.trimmomatic_out.fastq" ILLUMINACLIP:/rds/projects/l/leachlj-potato-qtl-project/NA_Area/adapters/TruSeq3-SE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:20 MINLEN:30

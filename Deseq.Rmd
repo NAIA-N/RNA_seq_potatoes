@@ -1,0 +1,1279 @@
+---
+title: "Analysis"
+author: "Nacima Abdi"
+date: "27/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, warning = FALSE}
+#########################################
+###   Load the required libraries     ###
+#########################################
+
+#Working directory
+#setwd("Z:/NA_AreaOnly/Results/Analysis")
+
+# DESeq2 library
+library("DESeq2")
+# Library for plots
+library("ggplot2")
+
+# Library for string operations in R
+#library("stringr")
+
+#library(reshape)
+
+#library(RColorBrewer)
+#library(dplyr)
+
+
+```
+Loading count data and sample meta data and preparing for analysis
+```{r}
+#######################################
+###   Read the counts from a file   ###
+#######################################
+# Set the working directory.
+
+# Read the table of counts into a dataframe, 
+count_table <- as.matrix(read.csv("count_matrix.csv",  row.names=1))
+# Check the top few rows of the dataframe
+#head(count_table)
+
+# Read sample data into a dataframe, 
+sample_data <- as.data.frame(read.csv("sampleInfo.csv"))
+#set sample as rownames
+rownames(sample_data) <- sample_data$Sample
+#sampleID <- sampleInfo$Sample
+#deleting sample column
+#sampleInfo = subset(sampleInfo, select = -c(Sample))
+
+
+#set species, tissue type and time point as factor
+as.factor(sample_data$Variety)
+as.factor(sample_data$Tissue)
+as.factor(sample_data$Time.point)
+```
+
+
+Separating leaf and root sample metadata
+```{r}
+#create two new table for sample information
+sample_InfoLR <- sample_data 
+#reorder table by tissue
+sample_InfoLR <- sample_InfoLR[order(sample_InfoLR$Tissue), ]
+#split table
+LRSample_Info<- split.data.frame(sample_InfoLR, sample_InfoLR$Tissue)
+#New tables
+Leaf_samples <- as.data.frame(LRSample_Info[[1]])
+
+root_samples <- as.data.frame(LRSample_Info[[2]])
+
+
+#sample IDs for each tissue type
+
+Leaf_sample.ids = row.names(Leaf_samples)
+Root_sample.ids = row.names(root_samples)
+
+```
+Removing genes with low read counts
+```{r}
+###################################################################
+###   Remove genes that have less than 10 reads mapping to them ###
+###################################################################
+#check dimensions
+dim(count_table) 
+#set threshold to 10
+lowcoverage_threshold <- 10
+
+# Index of genes that the maximal count across the samples is 10 
+lowcoverage<-(rowMax(as.matrix(count_table)) <= lowcoverage_threshold)
+
+# Check the numbers
+table(lowcoverage)
+
+#Filter out low coverage genes by redefining the count table
+count_Matrix<-count_table[!lowcoverage,]
+#check dimensions
+dim(count_Matrix)
+
+```
+
+
+Creating separate count matrix for the two tissue types
+```{r}
+#separating count data for tissue type using previously slit sample IDs
+
+Leaf_count_Matrix <- count_Matrix[,c(Leaf_sample.ids)]
+root_count_Matrix <- count_Matrix[,c(Root_sample.ids)]
+
+
+```
+
+Analysis of Root data
+Deseq analysis of root data
+```{r}
+#######################################
+###   DESeq2 analysis (non-paired)  ###
+#######################################
+
+# Define the main DESeq object.
+
+Rdds <- DESeqDataSetFromMatrix(countData = root_count_Matrix, colData =root_samples, design=~ Variety + Time.point + Variety:Time.point)
+
+
+# Let DESeq run the statistical model
+
+system.time(
+  Rdds<- DESeq(Rdds, betaPrior=FALSE)
+)
+
+# result names generated with design used
+resultsNames(Rdds) 
+```
+
+Extract Results for DGE for root data
+
+Control vs Control 
+Comparing susceptible vs tolerant potatoes under normal condition
+reference 
+```{r}
+
+# testing for difference between the two varieties under control conditions with susceptible as reference
+res_controlR <- results(Rdds,contrast = c("Variety","Susceptible: Wila Huaka CIP code: 703248", "Tolerant: Negrita CIP code:703671"))
+head(res_controlR)
+
+# Description of the columns
+mcols(res_controlR)$description
+
+# How many genes are differentially expressed?
+table(res_controlR$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_controlR)
+
+# Order the genes by the significance of DE
+res_controlR_ordered=res_controlR[order(res_controlR$padj),]
+# Show top 10 genes
+head(res_controlR_ordered,10)
+
+### Write differential results to a csv file
+#write.csv(as.data.frame(res_controlR_ordered),file="DEG_results_Controls_Root.csv")
+
+#significant genes
+CSGR <- as.data.frame(res_controlR_ordered)
+Control_sig_genesR <- CSGR[which(CSGR$padj< 0.05),]
+
+### Write sig differential results to a csv file
+#write.csv(as.data.frame(Control_sig_genesR),file="DEG_sig_results_Controls_Root.csv")
+
+#Up regulated Genes
+ControlR_Up_genes_df <- Control_sig_genesR[which(Control_sig_genesR$log2FoldChange> 1),]
+ControlR_Up_genes <- row.names(ControlR_Up_genes_df)
+ControlR_Up_genes <- sub("\\|.*", "", ControlR_Up_genes)
+head(ControlR_Up_genes)
+#write.csv(as.data.frame(ControlR_Up_genes),file="Upregulated_genes_control_Root.csv", row.names = FALSE)
+# Order the genes by the Log2fold
+ControlR_Up_genes_df_ordered=ControlR_Up_genes_df[order(ControlR_Up_genes_df$padj),]
+
+
+#Down regulated Genes
+ControlR_Down_genes_df <- Control_sig_genesR[which(Control_sig_genesR$log2FoldChange< -1),]
+ControlR_Down_genes <- row.names(ControlR_Down_genes_df)
+ControlR_Down_genes <- sub("\\|.*", "", ControlR_Down_genes)
+head(ControlR_Down_genes)
+#write.csv(as.data.frame(ControlR_Down_genes),file="Downregulated_genes_Control_Root.csv", row.names = FALSE)
+
+
+
+
+
+```
+Volcano plot for Control tol vs sus in roots
+```{r}
+### Read data in
+control_roots = read.csv("DEG_results_Controls_Root.csv")
+
+
+### Volcano plots
+
+## res_1x
+# plot adding up all layers we have seen so far
+control_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+control_roots$diffexpressed[control_roots$log2FoldChange > 1 & control_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+control_roots$diffexpressed[control_roots$log2FoldChange < -1 & control_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=control_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = "Drought Tolerance vs Susceptible under Control Conditions") +
+  theme(plot.title = element_text(hjust = 0.5))
+#save plot
+png("Control roots volcano plot.png")
+p
+dev.off()
+
+
+
+```
+
+DGE of susceptible 
+Early response vs control
+```{r}
+# the condition effect for susceptible (the main effect)
+res_T1_R <- results(Rdds, name="Time.point_T1..Early.response_vs_Control..Before.stress")
+head(res_T1_R)
+
+# Description of the columns
+mcols(res_T1_R)$description
+
+# How many genes are differentially expressed?
+table(res_T1_R$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T1_R)
+
+# Order the genes by the significance of DE
+res_T1_Rordered=res_T1_R[order(res_T1_R$padj),]
+# Show top 10 genes
+head(res_T1_Rordered,10)
+
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T1_Rordered),file="DEG_results_susceptible_T1_Root.csv")
+
+#significant genes
+ST1SGR <- as.data.frame(res_T1_Rordered)
+sus_T1_sig_genesR <- ST1SGR[which(ST1SGR$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(sus_T1_sig_genesR),file="DEG_sig_results_susceptible_T1_Root.csv")
+
+#Up regulated Genes
+susR_T1_Up_genes_df <- sus_T1_sig_genesR[which(sus_T1_sig_genesR$log2FoldChange> 1),]
+susR_T1_Up_genes <- row.names(susR_T1_Up_genes_df)
+susR_T1_Up_genes <- sub("\\|.*", "", susR_T1_Up_genes)
+head(susR_T1_Up_genes)
+write.csv(as.data.frame(susR_T1_Up_genes),file="Upregulated_genes_susceptible_T1_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+susR_T1_Down_genes_df <- sus_T1_sig_genesR[which(sus_T1_sig_genesR$log2FoldChange< -1),]
+susR_T1_Down_genes <- row.names(susR_T1_Down_genes_df)
+susR_T1_Down_genes <- sub("\\|.*", "", susR_T1_Down_genes)
+head(susR_T1_Down_genes)
+write.csv(as.data.frame(susR_T1_Down_genes),file="Downregulated_genes_susceptible_T1_Root.csv", row.names = FALSE)
+
+
+
+
+```
+Volcano plot for Control vs T1 susceptible in roots
+```{r}
+### Read data in
+T1_sus_roots = read.csv("DEG_results_susceptible_T1_Root.csv")
+
+
+### Volcano plots
+
+## res_1x
+# plot adding up all layers we have seen so far
+T1_sus_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T1_sus_roots$diffexpressed[T1_sus_roots$log2FoldChange > 1 & T1_sus_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T1_sus_roots$diffexpressed[T1_sus_roots$log2FoldChange < -1 & T1_sus_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T1_sus_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Early Response vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T1 vs Control sus roots volcano plot.png")
+p
+dev.off()
+
+
+
+```
+
+
+DGE of susceptible 
+Late response vs control
+```{r}
+#the condition effect for susceptible (the main effect)
+res_T2_R <- results(Rdds, name="Time.point_T2..Late.response_vs_Control..Before.stress")
+head(res_T2_R)
+
+# Description of the columns
+mcols(res_T2_R)$description
+
+# How many genes are differentially expressed?
+table(res_T2_R$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T2_R)
+
+# Order the genes by the significance of DE
+res_T2_Rordered=res_T2_R[order(res_T2_R$padj),]
+# Show top 10 genes
+head(res_T2_Rordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T2_Rordered),file="DEG_results_susceptible_T2_Root.csv")
+
+#significant genes
+ST2SGR <- as.data.frame(res_T2_Rordered)
+sus_T2_sig_genesR <- ST2SGR[which(ST2SGR$padj< 0.05),]
+
+### Write siq differential results to a csv file
+write.csv(as.data.frame(sus_T2_sig_genesR),file="DEG_sig_results_susceptible_T2_Root.csv")
+
+#Up regulated Genes
+susR_T2_Up_genes_df <- sus_T2_sig_genesR[which(sus_T2_sig_genesR$log2FoldChange> 1),]
+susR_T2_Up_genes <- row.names(susR_T2_Up_genes_df)
+susR_T2_Up_genes <- sub("\\|.*", "", susR_T2_Up_genes)
+head(susR_T2_Up_genes)
+write.csv(as.data.frame(susR_T2_Up_genes),file="Upregulated_genes_susceptible_T2_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+susR_T2_Down_genes_df <- sus_T2_sig_genesR[which(sus_T2_sig_genesR$log2FoldChange< -1),]
+susR_T2_Down_genes <- row.names(susR_T2_Down_genes_df)
+susR_T2_Down_genes <- sub("\\|.*", "", susR_T2_Down_genes)
+head(susR_T2_Down_genes)
+write.csv(as.data.frame(susR_T2_Down_genes),file="Downregulated_genes_susceptible_T2_Root.csv", row.names = FALSE)
+
+
+```
+
+Volcano plot for Control vs T2 susceptible in roots
+```{r}
+### Read data in
+T2_sus_roots = read.csv("DEG_results_susceptible_T2_Root.csv")
+
+
+### Volcano plots
+
+## res_1x
+# plot adding up all layers we have seen so far
+T2_sus_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T2_sus_roots$diffexpressed[T2_sus_roots$log2FoldChange > 1 & T2_sus_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T2_sus_roots$diffexpressed[T2_sus_roots$log2FoldChange < -1 & T2_sus_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T2_sus_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Late Response vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T2 vs Control sus roots volcano plot.png")
+p
+dev.off()
+
+```
+
+
+DGE of susceptible 
+recovery vs control
+```{r}
+## the condition effect for susceptible (the main effect)
+res_T3_R <- results(Rdds, name="Time.point_T3..Recovery_vs_Control..Before.stress" )
+head(res_T3_R)
+
+# Description of the columns
+mcols(res_T3_R)$description
+
+# How many genes are differentially expressed?
+table(res_T3_R$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T3_R)
+
+# Order the genes by the significance of DE
+res_T3_Rordered=res_T3_R[order(res_T3_R$padj),]
+# Show top 10 genes
+head(res_T3_Rordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T3_Rordered),file="DEG_results_susceptible_T3_Root.csv")
+
+#significant genes
+ST3SGR <- as.data.frame(res_T3_Rordered)
+sus_T3_sig_genesR <- ST3SGR[which(ST3SGR$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(sus_T3_sig_genesR),file="DEG_sig_results_susceptible_T3_Root.csv")
+
+#Up regulated Genes
+susR_T3_Up_genes_df <- sus_T3_sig_genesR[which(sus_T3_sig_genesR$log2FoldChange> 1),]
+susR_T3_Up_genes <- row.names(susR_T3_Up_genes_df)
+susR_T3_Up_genes <- sub("\\|.*", "", susR_T3_Up_genes)
+head(susR_T3_Up_genes)
+write.csv(as.data.frame(susR_T3_Up_genes),file="Upregulated_genes_susceptible_T3_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+susR_T3_Down_genes_df <- sus_T3_sig_genesR[which(sus_T3_sig_genesR$log2FoldChange< -1),]
+susR_T3_Down_genes <- row.names(susR_T3_Down_genes_df)
+susR_T3_Down_genes <- sub("\\|.*", "", susR_T3_Down_genes)
+head(susR_T3_Down_genes)
+write.csv(as.data.frame(susR_T3_Down_genes),file="Downregulated_genes_susceptible_T3_Root.csv", row.names = FALSE)
+
+
+```
+
+Volcano plot for Control vs T3 susceptible in roots
+```{r}
+### Read data in
+T3_sus_roots = read.csv("DEG_results_susceptible_T3_Root.csv")
+
+
+### Volcano plots
+
+## res_1x
+# plot adding up all layers we have seen so far
+T3_sus_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T3_sus_roots$diffexpressed[T3_sus_roots$log2FoldChange > 1 & T3_sus_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T3_sus_roots$diffexpressed[T3_sus_roots$log2FoldChange < -1 & T3_sus_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T3_sus_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Recovery vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T3 vs Control sus roots volcano plot.png")
+p
+dev.off()
+
+```
+
+DGE of Tolerant 
+Early response vs control
+```{r}
+# the condition effect for Tolerant 
+# this is, by definition, the main effect *plus* the interaction term
+res_T1_Rt <- results(Rdds, contrast = list( c("Time.point_T1..Early.response_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT1..Early.response") ))
+
+# Description of the columns
+mcols(res_T1_Rt)$description
+
+# How many genes are differentially expressed?
+table(res_T1_Rt$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T1_Rt)
+
+# Order the genes by the significance of DE
+res_T1_Rtordered=res_T1_Rt[order(res_T1_Rt$padj),]
+# Show top 10 genes
+head(res_T1_Rtordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T1_Rtordered),file="DEG_results_tolerant_T1_Root.csv")
+
+#significant genes
+TT1SGR <- as.data.frame(res_T1_Rtordered)
+tol_T1_sig_genesR <- TT1SGR[which(TT1SGR$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(tol_T1_sig_genesR),file="DEG_sig_results_tolerant_T1_Root.csv")
+
+#Up regulated Genes
+tolR_T1_Up_genes_df <- tol_T1_sig_genesR[which(tol_T1_sig_genesR$log2FoldChange> 1),]
+tolR_T1_Up_genes <- row.names(tolR_T1_Up_genes_df)
+tolR_T1_Up_genes <- sub("\\|.*", "", tolR_T1_Up_genes)
+head(tolR_T1_Up_genes)
+write.csv(as.data.frame(tolR_T1_Up_genes),file="Upregulated_genes_tolerant_T1_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolR_T1_Down_genes_df <- tol_T1_sig_genesR[which(tol_T1_sig_genesR$log2FoldChange< -1),]
+tolR_T1_Down_genes <- row.names(tolR_T1_Down_genes_df)
+tolR_T1_Down_genes <- sub("\\|.*", "", tolR_T1_Down_genes)
+head(tolR_T1_Down_genes)
+write.csv(as.data.frame(tolR_T1_Down_genes),file="Downregulated_genes_tolerant_T1_Root.csv", row.names = FALSE)
+
+
+
+```
+Volcano plot for Control vs T1 tolerant in roots
+```{r}
+### Read data in
+T1_tol_roots = read.csv("DEG_results_tolerant_T1_Root.csv")
+
+
+### Volcano plots
+
+## T1_tol_roots
+# plot adding up all layers we have seen so far
+T1_tol_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T1_tol_roots$diffexpressed[T1_tol_roots$log2FoldChange > 1 & T1_tol_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T1_tol_roots$diffexpressed[T1_tol_roots$log2FoldChange < -1 & T1_tol_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T1_tol_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Early Response vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T1 vs Control tol roots volcano plot.png")
+p
+dev.off()
+```
+
+
+
+
+DGE of Tolerant 
+Late response vs control
+```{r}
+res_T2_Rt <- results(Rdds, contrast = list( c("Time.point_T2..Late.response_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT2..Late.response") ))
+                     
+# Description of the columns
+mcols(res_T2_Rt)$description
+
+# How many genes are differentially expressed?
+table(res_T2_Rt$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T2_Rt)
+
+# Order the genes by the significance of DE
+res_T2_Rtordered=res_T2_Rt[order(res_T2_Rt$padj),]
+# Show top 10 genes
+head(res_T2_Rtordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T2_Rtordered),file="DEG_results_tolerant_T2_Root.csv")
+
+#significant genes
+TT2SGR <- as.data.frame(res_T2_Rtordered)
+tol_T2_sig_genesR <- TT2SGR[which(TT2SGR$padj< 0.05),]
+
+### Write differential results to a csv file
+write.csv(as.data.frame(tol_T2_sig_genesR),file="DEG_sig_results_tolerant_T2_Root.csv")
+
+#Up regulated Genes
+tolR_T2_Up_genes_df <- tol_T2_sig_genesR[which(tol_T2_sig_genesR$log2FoldChange> 1),]
+tolR_T2_Up_genes <- row.names(tolR_T2_Up_genes_df)
+tolR_T2_Up_genes <- sub("\\|.*", "", tolR_T2_Up_genes)
+head(tolR_T2_Up_genes)
+write.csv(as.data.frame(tolR_T2_Up_genes),file="Upregulated_genes_tolerant_T2_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolR_T2_Down_genes_df <- tol_T2_sig_genesR[which(tol_T2_sig_genesR$log2FoldChange< -1),]
+tolR_T2_Down_genes <- row.names(tolR_T2_Down_genes_df)
+tolR_T2_Down_genes <- sub("\\|.*", "", tolR_T2_Down_genes)
+head(tolR_T2_Down_genes)
+write.csv(as.data.frame(tolR_T2_Down_genes),file="Downregulated_genes_tolerant_T2_Root.csv", row.names = FALSE)
+```
+Volcano plot for Control vs T2 tolerant in roots
+```{r}
+### Read data in
+T2_tol_roots = read.csv("DEG_results_tolerant_T2_Root.csv")
+
+
+### Volcano plots
+
+## T2_tol_roots
+# plot adding up all layers we have seen so far
+T2_tol_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T2_tol_roots$diffexpressed[T2_tol_roots$log2FoldChange > 1 & T2_tol_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T2_tol_roots$diffexpressed[T2_tol_roots$log2FoldChange < -1 & T2_tol_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T2_tol_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Late Response vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T2 vs Control tol roots volcano plot.png")
+p
+dev.off()
+```
+
+DGE of Tolerant 
+recovery vs control
+```{r}
+res_T3_Rt <- results(Rdds, contrast = list( c("Time.point_T3..Recovery_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT3..Recovery") ))
+                     
+# Description of the columns
+mcols(res_T3_Rt)$description
+
+# How many genes are differentially expressed?
+table(res_T3_Rt$padj<0.05)
+#table(res_1xcontrol$padj<0.01)
+summary(res_T3_Rt)
+
+# Order the genes by the significance of DE
+res_T3_Rtordered=res_T3_Rt[order(res_T3_Rt$padj),]
+# Show top 10 genes
+head(res_T3_Rtordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T3_Rtordered),file="DEG_results_tolerant_T3_Root.csv")
+
+#significant genes
+TT3SGR <- as.data.frame(res_T3_Rtordered)
+tol_T3_sig_genesR <- TT3SGR[which(TT3SGR$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(tol_T3_sig_genesR),file="DEG_sig_results_tolerant_T3_Root.csv")
+
+#Up regulated Genes
+tolR_T3_Up_genes_df <- tol_T3_sig_genesR[which(tol_T3_sig_genesR$log2FoldChange> 1),]
+tolR_T3_Up_genes <- row.names(tolR_T3_Up_genes_df)
+tolR_T3_Up_genes <- sub("\\|.*", "", tolR_T3_Up_genes)
+head(tolR_T3_Up_genes)
+write.csv(as.data.frame(tolR_T3_Up_genes),file="Upregulated_genes_tolerant_T3_Root.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolR_T3_Down_genes_df <- tol_T3_sig_genesR[which(tol_T3_sig_genesR$log2FoldChange< -1),]
+tolR_T3_Down_genes <- row.names(tolR_T3_Down_genes_df)
+tolR_T3_Down_genes <- sub("\\|.*", "", tolR_T3_Down_genes)
+head(tolR_T3_Down_genes)
+write.csv(as.data.frame(tolR_T3_Down_genes),file="Downregulated_genes_tolerant_T3_Root.csv", row.names = FALSE)
+```
+ 
+Volcano plot for Control vs T3 tolerant in roots
+```{r}
+### Read data in
+T3_tol_roots = read.csv("DEG_results_tolerant_T3_Root.csv")
+
+
+### Volcano plots
+
+## T3_tol_roots
+# plot adding up all layers we have seen so far
+T3_tol_roots$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T3_tol_roots$diffexpressed[T3_tol_roots$log2FoldChange > 1 & T3_tol_roots$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T3_tol_roots$diffexpressed[T3_tol_roots$log2FoldChange < -1 & T3_tol_roots$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T3_tol_roots, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Recovery vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T3 vs Control tol roots volcano plot.png")
+p
+dev.off()
+
+```
+ 
+ 
+ 
+ 
+ 
+
+
+
+
+Analysis of Leaf data
+Deseq analysis of leaf data
+```{r}
+#######################################
+###   DESeq2 analysis (non-paired)  ###
+#######################################
+
+# Define the main DESeq object.
+# The design means that we compare
+
+Ldds <- DESeqDataSetFromMatrix(countData = Leaf_count_Matrix, colData =Leaf_samples, design=~ Variety + Time.point + Variety:Time.point)
+# Let DESeq run the statistical model
+
+system.time(
+  Ldds<- DESeq(Ldds)
+)
+
+```
+
+
+Extract Results for DGE for leaf data
+
+Control vs Control 
+Comparing susceptible vs tolerant potatoes under normal condition
+
+```{r}
+
+# testing for difference between the two varieties under control conditions with susceptible as reference
+res_controlL <- results(Ldds,contrast = c("Variety","Susceptible: Wila Huaka CIP code: 703248", "Tolerant: Negrita CIP code:703671"))
+head(res_controlL)
+
+# Description of the columns
+mcols(res_controlL)$description
+
+# How many genes are differentially expressed?
+table(res_controlL$padj<0.05)
+#table(res_1xcontrolL$padj<0.01)
+summary(res_controlL)
+
+# Order the genes by the significance of DE
+res_controlL_ordered=res_controlL[order(res_controlL$padj),]
+# Show top 10 genes
+head(res_controlL_ordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_controlL_ordered),file="DEG_results_Controls_Leaf.csv")
+
+#significant genes
+CSGL <- as.data.frame(res_controlL_ordered)
+Control_sig_genesL <- CSGL[which(CSGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(Control_sig_genesL),file="DEG_sig_results_Controls_Leaf.csv")
+
+#Up regulated Genes
+ControlL_Up_genes_df <- Control_sig_genesL[which(Control_sig_genesL$log2FoldChange> 1),]
+ControlL_Up_genes <- row.names(ControlL_Up_genes_df)
+ControlL_Up_genes <- sub("\\|.*", "", ControlL_Up_genes)
+head(ControlL_Up_genes)
+write.csv(as.data.frame(ControlL_Up_genes),file="Upregulated_genes_control_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+ControlL_Down_genes_df <- Control_sig_genesL[which(Control_sig_genesL$log2FoldChange< -1),]
+ControlL_Down_genes <- row.names(ControlL_Down_genes_df)
+ControlL_Down_genes <- sub("\\|.*", "", ControlL_Down_genes)
+head(ControlL_Down_genes)
+write.csv(as.data.frame(ControlL_Down_genes),file="Downregulated_genes_Control_Leaf.csv", row.names = FALSE)
+
+
+
+```
+
+
+Volcano plot for Control tol vs sus in Leaf
+```{r}
+### Read data in
+control_leaf = read.csv("DEG_results_Controls_Leaf.csv")
+
+### Volcano plots
+
+## control_leaf
+# plot adding up all layers we have seen so far
+control_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+control_leaf$diffexpressed[control_leaf$log2FoldChange > 1 & control_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+control_leaf$diffexpressed[control_leaf$log2FoldChange < -1 & control_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=control_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = "Drought Tolerance vs Susceptible under Control Condition") +
+  theme(plot.title = element_text(hjust = 0.5))
+#save plot
+png("Control Leaf volcano plot.png")
+p
+dev.off()
+```
+
+DGE of susceptible 
+Early response vs control
+```{r}
+# the condition effect for susceptible (the main effect)
+res_T1_L <- results(Ldds, name="Time.point_T1..Early.response_vs_Control..Before.stress")
+head(res_T1_L)
+
+# Description of the columns
+mcols(res_T1_L)$description
+
+# How many genes are differentially expressed?
+table(res_T1_L$padj<0.05)
+#table(res_T1_L$padj<0.01)
+summary(res_T1_L)
+
+# Order the genes by the significance of DE
+res_T1_Lordered=res_T1_L[order(res_T1_L$padj),]
+# Show top 10 genes
+head(res_T1_Lordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T1_Lordered),file="DEG_results_susceptible_T1_Leaf.csv")
+
+#significant genes
+ST1SGL <- as.data.frame(res_T1_Lordered)
+sus_T1_sig_genesL <- ST1SGL[which(ST1SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(sus_T1_sig_genesL),file="DEG_sig_results_susceptible_T1_Leaf.csv")
+
+#Up regulated Genes
+susL_T1_Up_genes_df <- sus_T1_sig_genesL[which(sus_T1_sig_genesL$log2FoldChange> 1),]
+susL_T1_Up_genes <- row.names(susL_T1_Up_genes_df)
+susL_T1_Up_genes <- sub("\\|.*", "", susL_T1_Up_genes)
+head(susL_T1_Up_genes)
+write.csv(as.data.frame(susL_T1_Up_genes),file="Upregulated_genes_susceptible_T1_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+susL_T1_Down_genes_df <- sus_T1_sig_genesL[which(sus_T1_sig_genesL$log2FoldChange< -1),]
+susL_T1_Down_genes <- row.names(susL_T1_Down_genes_df)
+susL_T1_Down_genes <- sub("\\|.*", "", susL_T1_Down_genes)
+head(susL_T1_Down_genes)
+write.csv(as.data.frame(susL_T1_Down_genes),file="Downregulated_genes_susceptible_T1_Leaf.csv", row.names = FALSE)
+```
+
+
+Volcano plot for Control vs T1 susceptible in leaf
+```{r}
+### Read data in
+T1_sus_leaf = read.csv("DEG_results_susceptible_T1_Leaf.csv")
+
+
+### Volcano plots
+
+## T1_sus_leaf
+# plot adding up all layers we have seen so far
+T1_sus_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T1_sus_leaf$diffexpressed[T1_sus_leaf$log2FoldChange > 1 & T1_sus_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T1_sus_leaf$diffexpressed[T1_sus_leaf$log2FoldChange < -1 & T1_sus_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T1_sus_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Eary Response vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T1 vs Control sus leaf volcano plot.png")
+p
+dev.off()
+
+```
+
+
+
+
+DGE of susceptible 
+Late response vs control
+```{r}
+#the condition effect for susceptible (the main effect)
+res_T2_L <- results(Ldds, name="Time.point_T2..Late.response_vs_Control..Before.stress")
+head(res_T2_L)
+
+# Description of the columns
+mcols(res_T2_L)$description
+
+# How many genes are differentially expressed?
+table(res_T2_L$padj<0.05)
+#table(res_T2_L$padj<0.01)
+summary(res_T2_L)
+
+# Order the genes by the significance of DE
+res_T2_Lordered=res_T2_L[order(res_T2_L$padj),]
+# Show top 10 genes
+head(res_T2_Lordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T2_Lordered),file="DEG_results_susceptible_T2_Leaf.csv")
+
+#significant genes
+ST2SGL <- as.data.frame(res_T2_Lordered)
+sus_T2_sig_genesL <- ST2SGL[which(ST2SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(sus_T2_sig_genesL),file="DEG_sig_results_susceptible_T2_Leaf.csv")
+
+#Up regulated Genes
+susL_T2_Up_genes_df <- sus_T2_sig_genesL[which(sus_T2_sig_genesL$log2FoldChange> 1),]
+susL_T2_Up_genes <- row.names(susL_T2_Up_genes_df)
+susL_T2_Up_genes <- sub("\\|.*", "", susL_T2_Up_genes)
+head(susL_T2_Up_genes)
+write.csv(as.data.frame(susL_T2_Up_genes),file="Upregulated_genes_susceptible_T2_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+susL_T2_Down_genes_df <- sus_T2_sig_genesL[which(sus_T2_sig_genesL$log2FoldChange< -1),]
+susL_T2_Down_genes <- row.names(susL_T2_Down_genes_df)
+susL_T2_Down_genes <- sub("\\|.*", "", susL_T2_Down_genes)
+head(susL_T2_Down_genes)
+write.csv(as.data.frame(susL_T2_Down_genes),file="Downregulated_genes_susceptible_T2_Leaf.csv", row.names = FALSE)
+
+```
+
+Volcano plot for Control vs T2 susceptible in leaf
+```{r}
+### Read data in
+T2_sus_leaf = read.csv("DEG_results_susceptible_T2_Leaf.csv")
+
+
+### Volcano plots
+
+## T2_sus_leaf
+# plot adding up all layers we have seen so far
+T2_sus_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T2_sus_leaf$diffexpressed[T2_sus_leaf$log2FoldChange > 1 & T2_sus_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T2_sus_leaf$diffexpressed[T2_sus_leaf$log2FoldChange < -1 & T2_sus_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T2_sus_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Late Response vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T2 vs Control sus leaf volcano plot.png")
+p
+dev.off()
+
+```
+
+
+DGE of susceptible 
+recovery vs control
+```{r}
+
+## the condition effect for susceptible (the main effect)
+res_T3_L <- results(Ldds, name="Time.point_T3..Recovery_vs_Control..Before.stress" )
+head(res_T3_L)
+
+# Description of the columns
+mcols(res_T3_L)$description
+
+# How many genes are differentially expressed?
+table(res_T3_L$padj<0.05)
+#table(res_T3_L$padj<0.01)
+summary(res_T3_L)
+
+# Order the genes by the significance of DE
+res_T3_Lordered=res_T3_L[order(res_T3_L$padj),]
+# Show top 10 genes
+head(res_T3_Lordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T3_Lordered),file="DEG_results_susceptible_T3_Leaf.csv")
+
+#significant genes
+ST3SGL <- as.data.frame(res_T3_Lordered)
+sus_T3_sig_genesL <- ST3SGL[which(ST3SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(sus_T3_sig_genesL),file="DEG_sig_results_susceptible_T3_Leaf.csv")
+
+#Up regulated Genes
+susL_T3_Up_genes_df <- sus_T3_sig_genesL[which(sus_T3_sig_genesL$log2FoldChange> 1),]
+susL_T3_Up_genes <- row.names(susL_T3_Up_genes_df)
+susL_T3_Up_genes <- sub("\\|.*", "", susL_T3_Up_genes)
+head(susL_T3_Up_genes)
+write.csv(as.data.frame(susL_T3_Up_genes),file="Upregulated_genes_susceptible_T3_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+susL_T3_Down_genes_df <- sus_T3_sig_genesL[which(sus_T3_sig_genesL$log2FoldChange< -1),]
+susL_T3_Down_genes <- row.names(susL_T3_Down_genes_df)
+susL_T3_Down_genes <- sub("\\|.*", "", susL_T3_Down_genes)
+head(susL_T3_Down_genes)
+write.csv(as.data.frame(susL_T3_Down_genes),file="Downregulated_genes_susceptible_T3_Leaf.csv", row.names = FALSE)
+
+```
+
+
+Volcano plot for Control vs T3 susceptible in leaf
+```{r}
+### Read data in
+T3_sus_leaf = read.csv("DEG_results_susceptible_T3_Leaf.csv")
+
+
+### Volcano plots
+
+## res_1x
+# plot adding up all layers we have seen so far
+T3_sus_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T3_sus_leaf$diffexpressed[T3_sus_leaf$log2FoldChange > 1 & T3_sus_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T3_sus_leaf$diffexpressed[T3_sus_leaf$log2FoldChange < -1 & T3_sus_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T3_sus_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Recovery vs Control in Drought Susceptible Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T3 vs Control sus leaf volcano plot.png")
+p
+dev.off()
+
+```
+
+
+DGE of Tolerant 
+Early response vs control
+```{r}
+# the condition effect for Tolerant in leaf tissue
+# this is, by definition, the main effect *plus* the interaction term
+res_T1_Lt <- results(Ldds, contrast = list( c("Time.point_T1..Early.response_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT1..Early.response") ))
+
+# Description of the columns
+mcols(res_T1_Lt)$description
+
+# How many genes are differentially expressed?
+table(res_T1_Lt$padj<0.05)
+#table(res_T1_Lt$padj<0.01)
+summary(res_T1_Lt)
+
+# Order the genes by the significance of DE
+res_T1_Ltordered=res_T1_Lt[order(res_T1_Lt$padj),]
+# Show top 10 genes
+head(res_T1_Ltordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T1_Ltordered),file="DEG_results_tolerant_T1_Leaf.csv")
+
+#significant genes
+TT1SGL <- as.data.frame(res_T1_Ltordered)
+tol_T1_sig_genesL <- TT1SGL[which(TT1SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(tol_T1_sig_genesL),file="DEG_sig_results_tolerant_T1_Leaf.csv")
+
+#Up regulated Genes
+tolL_T1_Up_genes_df <- tol_T1_sig_genesL[which(tol_T1_sig_genesL$log2FoldChange> 1),]
+tolL_T1_Up_genes <- row.names(tolL_T1_Up_genes_df)
+tolL_T1_Up_genes <- sub("\\|.*", "", tolL_T1_Up_genes)
+head(tolL_T1_Up_genes)
+write.csv(as.data.frame(tolL_T1_Up_genes),file="Upregulated_genes_tolerant_T1_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolL_T1_Down_genes_df <- tol_T1_sig_genesL[which(tol_T1_sig_genesL$log2FoldChange< -1),]
+tolL_T1_Down_genes <- row.names(tolL_T1_Down_genes_df)
+tolL_T1_Down_genes <- sub("\\|.*", "", tolL_T1_Down_genes)
+head(tolL_T1_Down_genes)
+write.csv(as.data.frame(tolL_T1_Down_genes),file="Downregulated_genes_tolerant_T1_Leaf.csv", row.names = FALSE)
+
+
+
+```
+Volcano plot for Control vs T1 tolerant in leaf
+```{r}
+### Read data in
+T1_tol_leaf = read.csv("DEG_results_tolerant_T1_Leaf.csv")
+
+
+### Volcano plots
+
+## T1_tol_leaf
+# plot adding up all layers we have seen so far
+T1_tol_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T1_tol_leaf$diffexpressed[T1_tol_leaf$log2FoldChange > 1 & T1_tol_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T1_tol_leaf$diffexpressed[T1_tol_leaf$log2FoldChange < -1 & T1_tol_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T1_tol_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Early Response vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T1 vs Control tol leaf volcano plot.png")
+p
+dev.off()
+```
+
+
+DGE of Tolerant 
+Late response vs control
+```{r}
+res_T2_Lt <- results(Ldds, contrast = list( c("Time.point_T2..Late.response_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT2..Late.response") ))
+                     
+# Description of the columns
+mcols(res_T2_Lt)$description
+
+# How many genes are differentially expressed?
+table(res_T2_Lt$padj<0.05)
+#table(res_T2_Lt$padj<0.01)
+summary(res_T2_Lt)
+
+# Order the genes by the significance of DE
+res_T2_Ltordered=res_T2_Lt[order(res_T2_Lt$padj),]
+# Show top 10 genes
+head(res_T2_Ltordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T2_Ltordered),file="DEG_results_tolerant_T2_Leaf.csv")
+
+#significant genes
+TT2SGL <- as.data.frame(res_T2_Ltordered)
+tol_T2_sig_genesL <- TT2SGL[which(TT2SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(tol_T2_sig_genesL),file="DEG_sig_results_tolerant_T2_Leaf.csv")
+
+#Up regulated Genes
+tolL_T2_Up_genes_df <- tol_T2_sig_genesL[which(tol_T2_sig_genesL$log2FoldChange> 1),]
+tolL_T2_Up_genes <- row.names(tolL_T2_Up_genes_df)
+tolL_T2_Up_genes <- sub("\\|.*", "", tolL_T2_Up_genes)
+head(tolL_T2_Up_genes)
+write.csv(as.data.frame(tolL_T2_Up_genes),file="Upregulated_genes_tolerant_T2_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolL_T2_Down_genes_df <- tol_T2_sig_genesL[which(tol_T2_sig_genesL$log2FoldChange< -1),]
+tolL_T2_Down_genes <- row.names(tolL_T2_Down_genes_df)
+tolL_T2_Down_genes <- sub("\\|.*", "", tolL_T2_Down_genes)
+head(tolL_T2_Down_genes)
+write.csv(as.data.frame(tolL_T2_Down_genes),file="Downregulated_genes_tolerant_T2_Leaf.csv", row.names = FALSE)
+```
+
+Volcano plot for Control vs T2 tolerant in leaf
+```{r}
+### Read data in
+T2_tol_leaf = read.csv("DEG_results_tolerant_T2_Leaf.csv")
+
+
+### Volcano plots
+
+## T2_tol_leaf
+# plot adding up all layers we have seen so far
+T2_tol_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T2_tol_leaf$diffexpressed[T2_tol_leaf$log2FoldChange > 1 & T2_tol_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T2_tol_leaf$diffexpressed[T2_tol_leaf$log2FoldChange < -1 & T2_tol_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T2_tol_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Late Response vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T2 vs Control tol leaf volcano plot.png")
+p
+dev.off()
+```
+
+
+DGE of Tolerant 
+recovery vs control
+The condition (recovery) effect for tolerant potatoes
+```{r}
+res_T3_Lt <- results(Ldds, contrast = list( c("Time.point_T3..Recovery_vs_Control..Before.stress", "VarietyTolerant..Negrita.CIP.code.703671.Time.pointT3..Recovery") ))
+                     
+# Description of the columns
+mcols(res_T3_Lt)$description
+
+# How many genes are differentially expressed?
+table(res_T3_Lt$padj<0.05)
+#table(res_T3_Lt$padj<0.01)
+summary(res_T3_Lt)
+
+# Order the genes by the significance of DE
+res_T3_Ltordered=res_T3_Lt[order(res_T3_Lt$padj),]
+# Show top 10 genes
+head(res_T3_Ltordered,10)
+### Write differential results to a csv file
+write.csv(as.data.frame(res_T3_Ltordered),file="DEG_results_tolerant_T3_Leaf.csv")
+
+#significant genes
+TT3SGL <- as.data.frame(res_T3_Ltordered)
+tol_T3_sig_genesL <- TT3SGL[which(TT3SGL$padj< 0.05),]
+
+### Write sig differential results to a csv file
+write.csv(as.data.frame(tol_T3_sig_genesL),file="DEG_sig_results_tolerant_T3_Leaf.csv")
+
+#Up regulated Genes
+tolL_T3_Up_genes_df <- tol_T3_sig_genesL[which(tol_T3_sig_genesL$log2FoldChange> 1),]
+tolL_T3_Up_genes <- row.names(tolL_T3_Up_genes_df)
+tolL_T3_Up_genes <- sub("\\|.*", "", tolL_T3_Up_genes)
+head(tolL_T3_Up_genes)
+write.csv(as.data.frame(tolL_T3_Up_genes),file="Upregulated_genes_tolerant_T3_Leaf.csv", row.names = FALSE)
+
+#Down regulated Genes
+tolL_T3_Down_genes_df <- tol_T3_sig_genesL[which(tol_T3_sig_genesL$log2FoldChange< -1),]
+tolL_T3_Down_genes <- row.names(tolL_T3_Down_genes_df)
+tolL_T3_Down_genes <- sub("\\|.*", "", tolL_T3_Down_genes)
+head(tolL_T3_Down_genes)
+write.csv(as.data.frame(tolL_T3_Down_genes),file="Downregulated_genes_tolerant_T3_Leaf.csv", row.names = FALSE)
+```
+
+
+Volcano plot for Control vs T3 tolerant in leaf
+```{r}
+### Read data in
+T3_tol_leaf = read.csv("DEG_results_tolerant_T3_Leaf.csv")
+
+
+### Volcano plots
+
+## T3_tol_leaf
+# plot adding up all layers we have seen so far
+T3_tol_leaf$diffexpressed <- "NO"
+# if log2Foldchange > 0 and padj < 0.05, set as "UP" 
+T3_tol_leaf$diffexpressed[T3_tol_leaf$log2FoldChange > 1 & T3_tol_leaf$padj < 0.05] <- "UP"
+# if log2Foldchange < 0 and padj < 0.05, set as "DOWN"
+T3_tol_leaf$diffexpressed[T3_tol_leaf$log2FoldChange < -1 & T3_tol_leaf$padj < 0.05] <- "DOWN"
+
+p <- ggplot(data=T3_tol_leaf, 
+            aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed)) +
+  geom_point() + 
+  theme_minimal() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_hline(yintercept=-log10(0.05), col="red") +
+  labs(title = " Recovery vs Control in Drought Tolerant Potato") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("T3 vs Control tol leaf volcano plot.png")
+p
+dev.off()
+```
+Summary table of DGE results
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
